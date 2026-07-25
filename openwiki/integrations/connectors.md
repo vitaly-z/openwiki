@@ -21,6 +21,8 @@ All connectors share types in `src/connectors/types.ts`:
 
 Shared IO helpers live in `src/connectors/io.ts`: `writeRawJson()` writes raw dumps with `0600`/`0700` permissions under `~/.openwiki/connectors/<id>/raw/<runId>/`, and `updateStateWithRun()` maintains the state file.
 
+All direct-API connectors (Gmail, Slack, X, Hacker News) and the HTTP MCP client route their network calls through `fetchWithResilience` in `src/connectors/http.ts`. This wrapper adds a per-request wall-clock timeout (default 30s; 60s for the HTTP MCP client to match the stdio client), bounded exponential backoff with full jitter on 429 and 5xx responses, and the same backoff on network errors (connection reset, DNS, timeout). It honors a numeric or HTTP-date `Retry-After` header when present. Auth failures (401/403) and other 4xx are returned unchanged and never retried, so Gmail's existing 401 → token-refresh → retry path still sees the 401 and accounts can't be locked by retry storms. The sleep function and jitter RNG are injectable so tests run instantly and deterministically.
+
 Agent-facing tools (`src/connectors/tools.ts`) expose this to the LLM during a run: `openwiki_list_connectors`, `openwiki_list_mcp_tools`, `openwiki_call_mcp_tool`, `openwiki_ingest_connector`, `openwiki_ingest_all_connectors`, `openwiki_list_raw_items`, `openwiki_read_raw_item`. Raw-file reads are sandboxed to stay inside each connector's `raw/` directory, and required-env status is reported as booleans only — secret values are never surfaced to the model.
 
 ## MCP subsystem
@@ -65,7 +67,7 @@ Agent-facing tools (`src/connectors/tools.ts`) expose this to the LLM during a r
 
 # Citations
 
-- `src/connectors/types.ts`, `src/connectors/registry.ts`, `src/connectors/io.ts`, `src/connectors/tools.ts`
+- `src/connectors/types.ts`, `src/connectors/registry.ts`, `src/connectors/io.ts`, `src/connectors/http.ts`, `src/connectors/tools.ts`
 - `src/connectors/mcp-client.ts`, `src/connectors/mcp-runtime.ts`, `src/connectors/sources/mcp.ts`
 - `src/connectors/sources/git-repo.ts`, `src/connectors/sources/gmail.ts`, `src/connectors/sources/hackernews.ts`, `src/connectors/sources/slack.ts`, `src/connectors/sources/web-search.ts`, `src/connectors/sources/x.ts`
 - `src/ingestion.ts`, `src/onboarding.ts`, `src/schedules.ts`
